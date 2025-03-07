@@ -28,23 +28,23 @@ Cell pop(void) {
 
 /* primitives */
 void fth_add(void) {
-    assert(stack_len > 2); 
+    assert(stack_len >= 2); 
     push(pop() + pop());
 }
 void fth_sub(void) {
-    assert(stack_len > 2); 
+    assert(stack_len >= 2); 
     push(pop() - pop());
 }
 void fth_mul(void) {
-    assert(stack_len > 2); 
+    assert(stack_len >= 2); 
     push(pop() * pop());
 }
 void fth_div(void) {
-    assert(stack_len > 2); 
+    assert(stack_len >= 2); 
     push(pop() / pop());
 }
 void fth_mod(void) {
-    assert(stack_len > 2); 
+    assert(stack_len >= 2); 
     push(pop() % pop());
 }
 void fth_lit(Cell value) {
