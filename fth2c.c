@@ -138,11 +138,11 @@ void run_compiler(FILE * fp) {
 
             /* Memory manipulation */
             } else if(streql("!", tok)) {
-                deferred_printf("*(Cell*)pop() = pop();\n");
+                deferred_printf("*(Cell *)pop() = pop();\n");
             } else if(streql("+!", tok)) {
-                deferred_printf("*(Cell*)pop() += pop();\n");
+                deferred_printf("*(Cell *)pop() += pop();\n");
             } else if(streql("@", tok)) {
-                deferred_printf("push(*(Cell*)pop());\n");
+                deferred_printf("push(*(Cell *)pop());\n");
 
             /* Boolean Logic */
             } else if(streql("=", tok)) {
@@ -176,6 +176,16 @@ void run_compiler(FILE * fp) {
                 state = VARIABLE_NAME;
             } else if (streql(tok, ":")) {
                 state = WORD_NAME;
+            } else if (streql(tok, "cells")) {
+                deferred_printf("push(pop() * sizeof(Cell));\n"); 
+            } else if (streql(tok, "allot")) {
+                if(variables_len <= 0) {
+                    fatal_error("Tried to allot memory for a non-existent variable"); 
+                }
+                deferred_printf("%s = realloc(%s, pop() + sizeof(Cell));\n",
+                        variables[variables_len - 1],
+                        variables[variables_len - 1]);
+
 
             /* Comments */
             } else if (streql(tok, "(")) {
@@ -232,11 +242,13 @@ void run_compiler(FILE * fp) {
 
             /* Memory manipulation */
             } else if(streql("!", tok)) {
-                printf("*(Cell*)pop() = pop();\n");
+                printf("*(Cell *)pop() = pop();\n");
             } else if(streql("+!", tok)) {
-                printf("*(Cell*)pop() += pop();\n");
+                printf("*(Cell *)pop() += pop();\n");
             } else if(streql("@", tok)) {
-                printf("push(*(Cell*)pop());\n");
+                printf("push(*(Cell *)pop());\n");
+            } else if (streql(tok, "cells")) {
+                deferred_printf("push(pop() * sizeof(Cell));\n"); 
 
             /* Boolean Logic */
             } else if(streql("=", tok)) {
@@ -303,7 +315,8 @@ void run_compiler(FILE * fp) {
             memmove(variables[variables_len], tok, strlen(tok));
             variables_len += 1;
             normalize_identifier(tok);
-            printf("Cell %s = 0;\n", tok);
+            printf("Cell * %s = 0;\n", tok);
+            deferred_printf("%s = malloc(sizeof(Cell));\n", tok);
             state = TOP_LEVEL;
 
         }

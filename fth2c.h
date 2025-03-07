@@ -1,14 +1,15 @@
 /* Forth Primitives */
 #include <stdio.h>
+#include <stdlib.h>
 #include <assert.h>
 
 #define cap 16
 
-typedef unsigned long Cell;
+typedef long Cell;
 Cell stack[cap] = {0};
 Cell stack_len = 0;
-
 Cell return_stack[cap] = {0};
+Cell * latest_variable = NULL;
 
 void push(Cell value) {
     assert(stack_len < cap);
