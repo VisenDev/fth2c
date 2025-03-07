@@ -10,4 +10,6 @@ a.out.c: test.fth fth2c
 a.out: a.out.c
 	cc a.out.c -fsanitize=address,undefined -g -o a.out
 
-
+.PHONY clean:
+clean:
+	trash *.out *.dSYM fth2c a.out.c 2>/dev/null
