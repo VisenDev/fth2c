@@ -199,7 +199,7 @@ void run_compiler(FILE * fp) {
                 deferred_printf("%s();\n", tok);
             } else if(find_string(variables, variables_len, tok) != -1) {
                 normalize_identifier(tok);
-                deferred_printf("fth_lit((Cell)&%s);\n", tok);
+                deferred_printf("fth_lit((Cell)%s);\n", tok);
             } else {
                 printf("invalid tok: \"%s\"\n", tok);
             }
@@ -248,7 +248,7 @@ void run_compiler(FILE * fp) {
             } else if(streql("@", tok)) {
                 printf("push(*(Cell *)pop());\n");
             } else if (streql(tok, "cells")) {
-                deferred_printf("push(pop() * sizeof(Cell));\n"); 
+                printf("push(pop() * sizeof(Cell));\n"); 
 
             /* Boolean Logic */
             } else if(streql("=", tok)) {
@@ -302,7 +302,7 @@ void run_compiler(FILE * fp) {
                 printf("%s();\n", tok);
             } else if(find_string(variables, variables_len, tok) != -1) {
                 normalize_identifier(tok);
-                printf("fth_lit((Cell)&%s);\n", tok);
+                printf("fth_lit((Cell)%s);\n", tok);
             } else {
                 printf("invalid tok: \"%s\"\n", tok);
             }

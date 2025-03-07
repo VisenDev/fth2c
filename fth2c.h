@@ -5,7 +5,7 @@
 
 #define cap 16
 
-typedef long Cell;
+typedef uintptr_t Cell;
 Cell stack[cap] = {0};
 Cell stack_len = 0;
 Cell return_stack[cap] = {0};
