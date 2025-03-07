@@ -66,5 +66,40 @@ void fth_swap(void) {
 }
 void fth_print_top(void) {
     Cell top = pop();
-    printf("%d ", top);
+    printf("%lu ", top);
+}
+void fth_eql(void) {
+    Cell top = pop();
+    Cell next = pop();
+    push(top == next);
+}
+void fth_less_than(void) {
+    Cell top = pop();
+    Cell next = pop();
+    push(next < top);
+}
+void fth_greater_than(void) {
+    Cell top = pop();
+    Cell next = pop();
+    push(next > top);
+}
+void fth_greater_than_eql(void) {
+    Cell top = pop();
+    Cell next = pop();
+    push(next >= top);
+}
+void fth_less_than_eql(void) {
+    Cell top = pop();
+    Cell next = pop();
+    push(next <= top);
+}
+void fth_and(void) {
+    Cell top = pop();
+    Cell next = pop();
+    push(top && next);
+}
+void fth_or(void) {
+    Cell top = pop();
+    Cell next = pop();
+    push(top || next);
 }
