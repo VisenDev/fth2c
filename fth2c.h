@@ -9,7 +9,12 @@ typedef long Cell;
 Cell stack[cap] = {0};
 Cell stack_len = 0;
 Cell return_stack[cap] = {0};
-Cell * latest_variable = NULL;
+Cell return_stack_len = 0;
+Cell tmp = 0;
+
+#define heap_cap 100000
+Cell heap[heap_cap] = {0};
+Cell heap_len = 0;
 
 void push(Cell value) {
     assert(stack_len < cap);

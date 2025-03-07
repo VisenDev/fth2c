@@ -10,12 +10,15 @@
 void fatal_error(const char * fmt, ...) {
     va_list args;
     va_start(args, fmt);
-    vprintf(fmt, args);
+    vfprintf(stderr, fmt, args);
     va_end(args);
     abort();
 }
 
 int is_number(char * str) {
+    if(*str == '-') {
+        ++str;
+    }
     while(*str != 0) {
         if(!isdigit(*str)) {
             return 0; 
@@ -38,6 +41,8 @@ int is_identifier(char * str) {
     return 1;
 }
 
+/* TODO 
+ * replace names that are C keywords*/
 void normalize_identifier(char * str) {
     while(*str != 0) {
         if(!isalpha(*str) && !isdigit(*str) && *str != '_') {
@@ -74,23 +79,6 @@ int streql(const char * a, const char * b) {
     return strcmp(a, b) == 0;
 }
 
-
-void deferred_printf(const char * fmt, ...) {
-    static char buf[100000] = {0};
-    static long len = 0;
-    va_list args;
-
-    if(fmt == NULL) {
-        printf("%s\n", buf);
-        memset(buf, 0, sizeof(buf));
-        len = 0;
-    } else {
-        va_start(args, fmt);
-        len += vsnprintf(buf + len, sizeof(buf), fmt, args);
-        va_end(args);
-    }
-}
-
 int find_string(const char haystack[][strcap], long count, const char * needle) {
     long i = 0;
     for(i = 0; i < count; ++i) {
@@ -113,6 +101,127 @@ void print_file(const char * filename) {
     fclose(fp);
 }
 
+typedef enum {NOW, LATER, FLUSH} OutputMode;
+void out(OutputMode mode, char * fmt, ...) {
+    static char buf[100000] = {0};
+    static long len = 0;
+    va_list args;
+
+    if(mode == NOW) {
+        va_start(args, fmt);
+        vprintf(fmt, args);
+        va_end(args);
+    } else if(mode == LATER) {
+        va_start(args, fmt);
+        len += vsnprintf(buf + len, sizeof(buf), fmt, args);
+        va_end(args);
+    } else if(mode == FLUSH) {
+        printf("%s\n", buf);
+        memset(buf, 0, sizeof(buf));
+        len = 0;
+    }
+}
+
+/*
+void indent(int modifier) {
+    static int level = 0;
+    int i = 0;
+    if(modifier != 0) {
+        level += modifier;
+    } else {
+        for(i = 0; i < level; ++i) {
+            printf("    ");
+        }
+    }
+}
+*/
+
+/* returns one if a match is found */
+int match_math_operations(char * tok, int toplevel) {
+    OutputMode mode = toplevel ? LATER : NOW;
+    if(streql(tok, "+")) {
+        out(mode, "fth_add();\n");
+    } else if (streql(tok, "-")) {
+        out(mode, "fth_sub();\n");
+    } else if(streql("*", tok)) {
+        out(mode,"fth_mul();\n");
+    } else if(streql("/", tok)) {
+        out(mode, "fth_div();\n");
+    } else if(streql("mod", tok)) {
+        out(mode, "fth_mod();\n");
+    } else if (streql(tok, "cells")) {
+        out(mode,"push(pop() * sizeof(Cell));\n"); 
+    } else {
+        return 0;
+    }
+    return 1;
+}
+
+int match_memory_operations(char * tok, int toplevel) {
+    OutputMode mode = toplevel ? LATER : NOW;
+    if(streql("!", tok)) {
+        out(mode, "tmp = pop();\n");
+        out(mode, "*(Cell *)tmp = pop();\n");
+    } else if(streql("+!", tok)) {
+        out(mode,"tmp = pop();\n");
+        out(mode,"*(Cell *)tmp += pop();\n");
+    } else if(streql("@", tok)) {
+        out(mode, "push(*(Cell *)pop());\n");
+    } else {
+        return 0;
+    }
+    return 1;
+}
+
+
+int match_boolean_operations(char * tok, int toplevel) {
+    OutputMode mode = toplevel ? LATER : NOW;
+    if(streql("=", tok)) {
+        out(mode, "fth_eql();\n");
+    } else if(streql("<", tok)) {
+        out(mode, "fth_less_than();\n");
+    } else if(streql(">", tok)) {
+        out(mode, "fth_greater_than();\n");
+    } else if(streql("<=", tok)) {
+        out(mode, "fth_less_than_eql();\n");
+    } else if(streql(">=", tok)) {
+        out(mode, "fth_greater_than_eql();\n");
+    } else if(streql("and", tok)) {
+        out(mode, "fth_and();\n");
+    } else if(streql("or", tok)) {
+        out(mode, "fth_or();\n");
+    } else {
+        return 0;
+    }
+    return 1;
+}
+
+int match_stack_operations(char * tok, int toplevel) {
+    OutputMode mode = toplevel ? LATER : NOW;
+
+    if(streql("dup", tok)) {
+        out(mode, "fth_dup();\n");
+    } else if(streql("swap", tok)) {
+        out(mode, "fth_swap();\n");
+    } else {
+        return 0;
+    }
+    return 1;
+}
+
+int match_io_operations(char * tok, int toplevel) {
+    OutputMode mode = toplevel ? LATER : NOW;
+
+    if(streql("emit", tok)) {
+        out(mode, "fth_emit();\n");
+    } else if(streql(".", tok)) {
+        out(mode, "fth_print_top();\n");
+    } else {
+        return 0;
+    }
+    return 1;
+}
+
 void run_compiler(FILE * fp) {
     char * tok = get_token(fp);
     enum {
@@ -128,6 +237,8 @@ void run_compiler(FILE * fp) {
     long variables_len = 0;
     static char words[1024][strcap] = {0};
     long words_len = 0;
+    long label_counter = 0;
+    long label_nesting_counter = 0;
 
     /*printf("#include \"fth2c.h\"\n");*/
     print_file("fth2c.h");
@@ -136,68 +247,22 @@ void run_compiler(FILE * fp) {
         switch(state) { 
         case TOP_LEVEL:
 
-            /*Math operations*/
-            if(streql(tok, "+")) {
-                deferred_printf("fth_add();\n");
-            } else if (streql(tok, "-")) {
-                deferred_printf("fth_sub();\n");
-            } else if(streql("*", tok)) {
-                deferred_printf("fth_mul();\n");
-            } else if(streql("/", tok)) {
-                deferred_printf("fth_div();\n");
-            } else if(streql("mod", tok)) {
-                deferred_printf("fth_mod();\n");
-            } else if(streql("dup", tok)) {
-
-            /* Memory manipulation */
-            } else if(streql("!", tok)) {
-                deferred_printf("tmp = pop();\n");
-                deferred_printf("*(Cell *)tmp = pop();\n");
-            } else if(streql("+!", tok)) {
-                deferred_printf("tmp = pop();\n");
-                deferred_printf("*(Cell *)tmp += pop();\n");
-            } else if(streql("@", tok)) {
-                deferred_printf("push(*(Cell *)pop());\n");
-
-            /* Boolean Logic */
-            } else if(streql("=", tok)) {
-                deferred_printf("fth_eql();\n");
-            } else if(streql("<", tok)) {
-                deferred_printf("fth_less_than();\n");
-            } else if(streql(">", tok)) {
-                deferred_printf("fth_greater_than();\n");
-            } else if(streql("<=", tok)) {
-                deferred_printf("fth_less_than_eql();\n");
-            } else if(streql(">=", tok)) {
-                deferred_printf("fth_greater_than_eql();\n");
-            } else if(streql("and", tok)) {
-                deferred_printf("fth_and();\n");
-            } else if(streql("or", tok)) {
-                deferred_printf("fth_or();\n");
-
-            /*Stack manipulation*/
-                deferred_printf("fth_dup();\n");
-            } else if(streql("swap", tok)) {
-                deferred_printf("fth_swap();\n");
-            } else if(streql("emit", tok)) {
-
-            /* IO */
-                deferred_printf("fth_emit();\n");
-            } else if(streql(".", tok)) {
-                deferred_printf("fth_print_top();\n");
+            if(match_math_operations(tok, 1)) {
+            } else if(match_memory_operations(tok, 1)) {
+            } else if(match_boolean_operations(tok, 1)) {
+            } else if(match_stack_operations(tok, 1)) {
+            } else if(match_io_operations(tok, 1)) {
 
             /* Variables */
             } else if(streql("variable", tok)) {
                 state = VARIABLE_NAME;
             } else if (streql(tok, ":")) {
                 state = WORD_NAME;
-            } else if (streql(tok, "cells")) {
-                deferred_printf("push(pop() * sizeof(Cell));\n"); 
             } else if (streql(tok, "allot")) {
                 if(variables_len <= 0) {
                     fatal_error("Tried to allot memory for a non-existent variable"); 
                 }
-                deferred_printf("%s = realloc(%s, pop() + sizeof(Cell));\n",
+                out(LATER, "%s = realloc(%s, pop() + sizeof(Cell));\n",
                         variables[variables_len - 1],
                         variables[variables_len - 1]);
 
@@ -208,17 +273,17 @@ void run_compiler(FILE * fp) {
 
             /* Misc */
             } else if(streql("bye", tok)) {
-                deferred_printf("exit(0);\n");
+                out(LATER, "exit(0);\n");
             } else if(is_number(tok)) {
-                deferred_printf("fth_lit(%s);\n", tok);
+                out(LATER, "fth_lit(%s);\n", tok);
             } else if(find_string(words, words_len, tok) != -1) {
                 normalize_identifier(tok);
-                deferred_printf("%s();\n", tok);
+                out(LATER, "%s();\n", tok);
             } else if(find_string(variables, variables_len, tok) != -1) {
                 normalize_identifier(tok);
-                deferred_printf("fth_lit((Cell)%s);\n", tok);
+                out(LATER, "fth_lit((Cell)%s);\n", tok);
             } else {
-                printf("invalid tok: \"%s\"\n", tok);
+                fprintf(stderr, "invalid tok: \"%s\"\n", tok);
             }
             break;
         case WORD_NAME: 
@@ -228,7 +293,7 @@ void run_compiler(FILE * fp) {
             memmove(words[words_len], tok, strlen(tok));
             words_len += 1;
             normalize_identifier(tok);
-            printf("void %s(void) {\n Cell tmp = 0;\n", tok);
+            out(NOW, "void %s(void) {\n", tok);
             state = WORD_BODY;
             break;
         case PAREN_COMMENT_TOP_LEVEL:
@@ -242,69 +307,29 @@ void run_compiler(FILE * fp) {
             }
             break;
         case WORD_BODY: 
-
-
-
-            /* Math */
-            if(streql("+", tok)) {
-                printf("fth_add();\n");
-            } else if(streql("-", tok)) {
-                printf("fth_sub();\n");
-            } else if(streql("*", tok)) {
-                printf("fth_mul();\n");
-            } else if(streql("/", tok)) {
-                printf("fth_div();\n");
-            } else if(streql("mod", tok)) {
-                printf("fth_mod();\n");
-
-            /* Memory manipulation */
-            } else if(streql("!", tok)) {
-                printf("tmp = pop();\n");
-                printf("*(Cell *)tmp = pop();\n");
-            } else if(streql("+!", tok)) {
-                deferred_printf("tmp = pop();\n");
-                deferred_printf("*(Cell *)tmp += pop();\n");
-            } else if(streql("@", tok)) {
-                printf("push(*(Cell *)pop());\n");
-            } else if (streql(tok, "cells")) {
-                printf("push(pop() * sizeof(Cell));\n"); 
-
-            /* Boolean Logic */
-            } else if(streql("=", tok)) {
-                printf("fth_eql();\n");
-            } else if(streql("<", tok)) {
-                printf("fth_less_than();\n");
-            } else if(streql(">", tok)) {
-                printf("fth_greater_than();\n");
-            } else if(streql("<=", tok)) {
-                printf("fth_less_than_eql();\n");
-            } else if(streql(">=", tok)) {
-                printf("fth_greater_than_eql();\n");
-            } else if(streql("and", tok)) {
-                printf("fth_and();\n");
-            } else if(streql("or", tok)) {
-                printf("fth_or();\n");
-
-            /* Stack manipulation */
-            } else if(streql("dup", tok)) {
-                printf("fth_dup();\n");
-            } else if(streql("swap", tok)) {
-                printf("fth_swap();\n");
-            } else if(streql("mod", tok)) {
-                printf("fth_mod();\n");
-            } else if(streql("emit", tok)) {
-                printf("fth_emit();\n");
-            } else if(streql(".", tok)) {
-                printf("fth_print_top();\n");
+            if(match_math_operations(tok, 0)) {
+            } else if(match_memory_operations(tok, 0)) {
+            } else if(match_boolean_operations(tok, 0)) {
+            } else if(match_stack_operations(tok, 0)) {
+            } else if(match_io_operations(tok, 0)) {
 
             /* if statements */
             } else if(streql("if", tok)) {
-                printf("if(pop()) {\n");
+                out(NOW, "if(pop()) {\n");
             } else if(streql("else", tok)) {
-                printf("} else {\n");
+                out(NOW, "} else {\n");
             } else if(streql("then", tok)) {
-                printf("}\n");
+                out(NOW, "}\n");
 
+            /* begin while repeat */
+            } else if(streql("begin", tok)) {
+                ++label_counter;
+                out(NOW, "A%d:\n", label_counter);
+            } else if(streql("while", tok)) {
+                out(NOW, "if(pop()) {\n");
+            } else if(streql("repeat", tok)) {
+                out(NOW, "goto A%d;\n}\n", label_counter);
+                --label_counter;
 
             /* Comments */
             } else if (streql(tok, "(")) {
@@ -325,7 +350,7 @@ void run_compiler(FILE * fp) {
                 normalize_identifier(tok);
                 printf("fth_lit((Cell)%s);\n", tok);
             } else {
-                printf("invalid tok: \"%s\"\n", tok);
+                fprintf(stderr, "invalid tok: \"%s\"\n", tok);
             }
             break;
             
@@ -337,14 +362,14 @@ void run_compiler(FILE * fp) {
             variables_len += 1;
             normalize_identifier(tok);
             printf("Cell * %s = 0;\n", tok);
-            deferred_printf("%s = malloc(sizeof(Cell));\n", tok);
+            out(LATER, "%s = malloc(sizeof(Cell));\n", tok);
             state = TOP_LEVEL;
 
         }
     }
 
     printf("int main(void) {\nCell tmp = 0;\n");
-    deferred_printf(NULL);
+    out(FLUSH, NULL);
     printf("return 0;\n}\n");
 }
 
