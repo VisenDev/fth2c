@@ -126,7 +126,7 @@ void run_compiler(FILE * fp) {
             /*Math operations*/
             if(streql(tok, "+")) {
                 deferred_printf("fth_add();\n");
-            } else if (streql(tok, "+")) {
+            } else if (streql(tok, "-")) {
                 deferred_printf("fth_sub();\n");
             } else if(streql("*", tok)) {
                 deferred_printf("fth_mul();\n");
@@ -138,9 +138,11 @@ void run_compiler(FILE * fp) {
 
             /* Memory manipulation */
             } else if(streql("!", tok)) {
-                deferred_printf("*(Cell *)pop() = pop();\n");
+                deferred_printf("tmp = pop();\n");
+                deferred_printf("*(Cell *)tmp = pop();\n");
             } else if(streql("+!", tok)) {
-                deferred_printf("*(Cell *)pop() += pop();\n");
+                deferred_printf("tmp = pop();\n");
+                deferred_printf("*(Cell *)tmp += pop();\n");
             } else if(streql("@", tok)) {
                 deferred_printf("push(*(Cell *)pop());\n");
 
@@ -192,6 +194,8 @@ void run_compiler(FILE * fp) {
                 state = PAREN_COMMENT_TOP_LEVEL;
 
             /* Misc */
+            } else if(streql("bye", tok)) {
+                deferred_printf("exit(0);\n");
             } else if(is_number(tok)) {
                 deferred_printf("fth_lit(%s);\n", tok);
             } else if(find_string(words, words_len, tok) != -1) {
@@ -211,7 +215,7 @@ void run_compiler(FILE * fp) {
             memmove(words[words_len], tok, strlen(tok));
             words_len += 1;
             normalize_identifier(tok);
-            printf("void %s(void) {\n", tok);
+            printf("void %s(void) {\n Cell tmp = 0;\n", tok);
             state = WORD_BODY;
             break;
         case PAREN_COMMENT_TOP_LEVEL:
@@ -242,9 +246,11 @@ void run_compiler(FILE * fp) {
 
             /* Memory manipulation */
             } else if(streql("!", tok)) {
-                printf("*(Cell *)pop() = pop();\n");
+                printf("tmp = pop();\n");
+                printf("*(Cell *)tmp = pop();\n");
             } else if(streql("+!", tok)) {
-                printf("*(Cell *)pop() += pop();\n");
+                deferred_printf("tmp = pop();\n");
+                deferred_printf("*(Cell *)tmp += pop();\n");
             } else if(streql("@", tok)) {
                 printf("push(*(Cell *)pop());\n");
             } else if (streql(tok, "cells")) {
@@ -292,6 +298,8 @@ void run_compiler(FILE * fp) {
                 state = PAREN_COMMENT_WORD_BODY;
 
             /* Misc */
+            } else if(streql("bye", tok)) {
+                printf("exit(0);\n");
             } else if(streql(";", tok)) {
                 printf("}\n");
                 state = TOP_LEVEL;
@@ -322,7 +330,7 @@ void run_compiler(FILE * fp) {
         }
     }
 
-    printf("int main(void) {\n");
+    printf("int main(void) {\nCell tmp = 0;\n");
     deferred_printf(NULL);
     printf("return 0;\n}\n");
 }

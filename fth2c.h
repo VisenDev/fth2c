@@ -33,20 +33,22 @@ void fth_add(void) {
     push(pop() + pop());
 }
 void fth_sub(void) {
-    assert(stack_len >= 2); 
-    push(pop() - pop());
+    Cell top = pop();
+    Cell next = pop();
+    push(next - top);
 }
 void fth_mul(void) {
-    assert(stack_len >= 2); 
     push(pop() * pop());
 }
 void fth_div(void) {
-    assert(stack_len >= 2); 
-    push(pop() / pop());
+    Cell top = pop();
+    Cell next = pop();
+    push(next / top);
 }
 void fth_mod(void) {
-    assert(stack_len >= 2); 
-    push(pop() % pop());
+    Cell top = pop();
+    Cell next = pop();
+    push(next % top);
 }
 void fth_lit(Cell value) {
     push(value);

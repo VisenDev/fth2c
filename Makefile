@@ -1,15 +1,14 @@
-all: a.out
-	./a.out
+DIR=build
+FTH2C=./$(DIR)/fth2c
 
 fth2c: fth2c.c fth2c.h
-	cc fth2c.c -fsanitize=address -fsanitize=undefined -g -std=c89 -Wall -Wextra -o fth2c
+	mkdir -p $(DIR)
+	cc fth2c.c -fsanitize=address,undefined -g -std=c89 -Wall -Wextra -o $(FTH2C)
 
-a.out.c: test.fth fth2c
-	./fth2c	test.fth > a.out.c
-
-a.out: a.out.c
-	cc a.out.c -fsanitize=address,undefined -g -o a.out
+.PHONY test:
+test:
+	./runtests.sh
 
 .PHONY clean:
-clean:
-	trash *.out *.dSYM fth2c a.out.c 2>/dev/null
+clean: 
+	trash $(DIR)
