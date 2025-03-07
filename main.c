@@ -14,6 +14,38 @@ void fatal_error(const char * fmt, ...) {
     abort();
 }
 
+int isnumber(char * str) {
+    while(*str != 0) {
+        if(!isdigit(*str)) {
+            return 0; 
+        }
+        ++str;
+    }
+    return 1;
+}
+
+int isidentifier(char * str) {
+    if(!isalpha(*str) && *str != '_') {
+        return 0; 
+    }
+    while(*str != 0) {
+        if(!isalpha(*str) && *str != '_' && !isdigit(*str)) {
+            return 0;
+        }
+        ++str;
+    }
+    return 1;
+}
+
+void normalize_identifier(char * str) {
+    while(*str != 0) {
+        if(!isalpha(str) && !isdigit(*str) && *str != '_') {
+            *str = '_';
+        }
+        ++str;
+    }
+}
+
 int main(int argc, char ** argv) {
     (void)argc;
     (void)argv;
@@ -25,6 +57,8 @@ int main(int argc, char ** argv) {
         FILE * fp = fopen(filename, "rw");
         char ch = fgetc(fp);
         char tok[1024] = {0};
+        char runtime_code[2048] = {0};
+        long runtime_code_len = 0;
         long toklen = 0;
         enum {
             STATE_START,
@@ -32,6 +66,7 @@ int main(int argc, char ** argv) {
             STATE_WORD_BODY,
         } state = STATE_START;
 
+        printf("#include \"fth2c.h\"\n\n");
 
         while(!feof(fp)) {
             if(isspace(ch)) {
@@ -41,13 +76,19 @@ int main(int argc, char ** argv) {
                         if(strcmp(":", tok) == 0) {
                             printf("void ");
                             state = STATE_WORD_START;
+                        } else if(isidentifier(tok)) {
+                            runtime_code_len +=
+                            sprintf(runtime_code + runtime_code_len, "%s();\n", tok);
                         } else {
                             printf("invalid tok: \"%s\"\n", tok);
                         }
                     } else if(state == STATE_WORD_START) {
+                        if(!isidentifier(tok)) {
+                            normalize_identifier(tok);
+                        }
                         printf("%s", tok);
                         state = STATE_WORD_BODY;
-                        printf("(void) {");
+                        printf("(void) {\n");
                     } else if(state == STATE_WORD_BODY) {
                         if(strcmp("+", tok) == 0) {
                             printf("fth_add();\n");
@@ -61,9 +102,13 @@ int main(int argc, char ** argv) {
                             printf("fth_mod();\n");
                         } else if(strcmp("emit", tok) == 0) {
                             printf("fth_emit();\n");
+                        } else if(strcmp(".", tok) == 0) {
+                            printf("fth_print_top();\n");
                         } else if(strcmp(";", tok) == 0) {
                             printf("}\n");
                             state = STATE_START;
+                        } else if(isnumber(tok)) {
+                            printf("fth_lit(%s);\n", tok);
                         } else {
                             printf("invalid tok: \"%s\"\n", tok);
                         }
@@ -77,6 +122,10 @@ int main(int argc, char ** argv) {
             }
             ch = fgetc(fp);
         }
+
+        printf("int main(void) {\n");
+        printf("%s\n", runtime_code);
+        printf("return 0;\n}\n");
 
         fclose(fp);
     }

@@ -2,7 +2,7 @@
 #include <stdio.h>
 #include <assert.h>
 
-#define cap 2048
+#define cap 16
 
 typedef unsigned long Cell;
 Cell stack[cap] = {0};
@@ -37,7 +37,7 @@ void fth_sub(void) {
 }
 void fth_mul(void) {
     assert(stack_len > 2); 
-    push(pop() - pop());
+    push(pop() * pop());
 }
 void fth_div(void) {
     assert(stack_len > 2); 
@@ -51,7 +51,7 @@ void fth_lit(Cell value) {
     push(value);
 }
 void fth_emit(void) {
-    putc(pop());
+    putchar(pop());
 }
 void fth_dup(void) {
     Cell value = pop();
@@ -66,5 +66,5 @@ void fth_swap(void) {
 }
 void fth_print_top(void) {
     Cell top = pop();
-    printf("%d", top);
+    printf("%d ", top);
 }
