@@ -101,6 +101,18 @@ int find_string(const char haystack[][strcap], long count, const char * needle) 
     return -1;
 }
 
+void print_file(const char * filename) {
+    FILE* fp = fopen(filename, "r");
+    char ch;
+    if(fp == NULL) {
+        fatal_error("Failed to open: %s\n", filename);
+    }
+    while ((ch = fgetc(fp)) != EOF) {
+        putchar(ch);
+    }
+    fclose(fp);
+}
+
 void run_compiler(FILE * fp) {
     char * tok = get_token(fp);
     enum {
@@ -117,7 +129,8 @@ void run_compiler(FILE * fp) {
     static char words[1024][strcap] = {0};
     long words_len = 0;
 
-    printf("#include \"fth2c.h\"\n");
+    /*printf("#include \"fth2c.h\"\n");*/
+    print_file("fth2c.h");
 
     for(;tok != NULL; tok = get_token(fp)) {
         switch(state) { 
