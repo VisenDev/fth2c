@@ -322,7 +322,6 @@ void run_compiler(FILE * fp) {
     long words_len = 0;
     static char constants[1024][strcap] = {0};
     long constants_len = 0;
-    int numeric_output_process = 0;
 
     /*printf("#include \"fth2c.h\"\n");*/
     print_file("fth2c.h");

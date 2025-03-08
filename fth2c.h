@@ -4,6 +4,35 @@
 #include <assert.h>
 #include <string.h>
 
+void raw_um_mod(unsigned long hi, unsigned long lo, unsigned long divisor,
+            unsigned long *remainder, unsigned long *quotient) {
+    unsigned long q = 0;
+    unsigned long r = hi;  /* initialize remainder with high part*/
+    int counter = 0;
+    if (divisor == 0) {
+        fprintf(stderr, "Error: Division by zero in UM/MOD\n");
+        return;
+    }
+    if (hi >= divisor) {
+        /* In many Forth systems this condition raises a division error.*/
+        fprintf(stderr, "Error: Dividend too large (hi >= divisor)\n");
+        return;
+    }
+
+    /* Process 64 bits from the low part:*/
+    for (counter = 0; counter < 64; counter++) {
+        /* Shift r left by 1 and bring in the next bit of 'lo'.*/
+        r = (r << 1) | ((lo >> (63 - counter)) & 1);
+        q <<= 1;
+        if (r >= divisor) {
+            r -= divisor;
+            q |= 1;
+        }
+    }
+    *quotient = q;
+    *remainder  = r;
+}
+
 #define cap 16
 
 typedef long Cell;
