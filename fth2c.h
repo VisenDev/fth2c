@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <assert.h>
+#include <string.h>
 
 #define cap 16
 
@@ -10,11 +11,16 @@ Cell stack[cap] = {0};
 Cell stack_len = 0;
 Cell return_stack[cap] = {0};
 Cell return_stack_len = 0;
+Cell base = 10;
 Cell tmp = 0;
+char nc_buf[1024] = {0};
+Cell nc_buf_len = 0;
 
+/*
 #define heap_cap 100000
 Cell heap[heap_cap] = {0};
 Cell heap_len = 0;
+*/
 
 void push(Cell value) {
     assert(stack_len < cap);
@@ -180,4 +186,66 @@ void fth_pick(void) {
         Cell index = stack_len - top - 1;
         push(stack[index]);
     }
+}
+void fth_drop(void) {
+    (void)pop();
+}
+/* TODO fix
+ * currently my string conversion functions only work for single width cells
+ * so skipping this function makes those functions work */
+void fth_single_to_double(void) {
+    Cell top = pop();
+    push(top);
+    /*the following code would actually implement the double width cells */
+    /* 
+    if(top < 0) {
+        push(-1);
+    } else {
+        push(0);
+    }*/
+}
+void fth_decimal(void) {
+    base = 10;
+}
+void fth_hex(void) {
+    base = 16;
+}
+
+void fth_begin_numeric_conversion(void) {
+    nc_buf_len = 0;
+    memset(nc_buf, 0, sizeof(nc_buf));
+}
+
+void fth_end_numeric_conversion(void) {
+    Cell counter = 0;
+    (void)pop();
+    for(counter = 0; counter < nc_buf_len / 2; ++counter) {
+        char _tmp = nc_buf[counter];
+        nc_buf[counter] = nc_buf[nc_buf_len - counter - 1];
+        nc_buf[nc_buf_len - counter - 1] = _tmp;
+    }
+
+    push((Cell)nc_buf);
+    push(nc_buf_len);
+}
+
+/*corresponds with # in forth*/
+void fth_convert_digit(void) {
+    Cell top = pop();
+    Cell digit = top % base;
+    Cell quotient = top / base;
+    nc_buf[nc_buf_len] = (char)(digit + '0');
+    nc_buf[nc_buf_len + 1] = 0;
+    ++nc_buf_len;
+    push(quotient);
+}
+/*corresponds with #s in forth*/
+void fth_convert_number(void) {
+    Cell top = pop();
+    while(top != 0) {
+        push(top);           
+        fth_convert_digit();
+        top = pop();
+    }
+    push(0);
 }

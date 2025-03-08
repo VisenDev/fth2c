@@ -12,6 +12,7 @@
  * Support for create???
  * File io
  * Rework allot and variables to use a runtime stack rather than malloc
+ * normalize c keywords
  */
 
 void fatal_error(const char * fmt, ...) {
@@ -148,6 +149,12 @@ int match_math_operations(char * tok, int toplevel) {
     OutputMode mode = toplevel ? LATER : NOW;
     if(streql(tok, "+")) {
         out(mode, "fth_add();\n");
+    } else if(streql(tok, "1+")) {
+        out(mode, "fth_lit(1);\n");
+        out(mode, "fth_add();\n");
+    } else if(streql(tok, "1-")) {
+        out(mode, "fth_lit(1);\n");
+        out(mode, "fth_sub();\n");
     } else if (streql(tok, "-")) {
         out(mode, "fth_sub();\n");
     } else if(streql("*", tok)) {
@@ -162,6 +169,10 @@ int match_math_operations(char * tok, int toplevel) {
         out(mode,"fth_cells();\n"); 
     } else if (streql(tok, "cell+")) {
         out(mode,"fth_cell_plus();\n"); 
+    } else if (streql(tok, "decimal")) {
+        out(mode,"fth_decimal();\n"); 
+    } else if (streql(tok, "hex")) {
+        out(mode,"fth_hex();\n"); 
     } else {
         return 0;
     }
@@ -218,6 +229,8 @@ int match_stack_operations(char * tok, int toplevel) {
         out(mode, "fth_swap();\n");
     } else if(streql("nip", tok)) {
         out(mode, "fth_nip();\n");
+    } else if(streql("drop", tok)) {
+        out(mode, "fth_drop();\n");
     } else if(streql("rot", tok)) {
         out(mode, "fth_rot();\n");
     } else if(streql("pick", tok)) {
@@ -251,6 +264,41 @@ int match_io_operations(char * tok, int toplevel) {
     return 1;
 }
 
+int match_numeric_conversion_operations(char * tok, int toplevel) {
+    OutputMode mode = toplevel ? LATER : NOW;
+    static int active = 0;
+
+    if(streql("s>d", tok)) {
+        out(mode, "fth_single_to_double();\n");
+    } else if(streql("<#", tok)) {
+        if(active != 0) {
+            fatal_error("Nested '<#'\n");
+        }
+        active = 1;
+        out(mode, "fth_begin_numeric_conversion();\n");
+    } else if(streql("#>", tok)) {
+        if(active != 1) {
+            fatal_error("Unstructured '#>'\n");
+        }
+        active = 0;
+        out(mode, "fth_end_numeric_conversion();\n");
+    } else if(streql("#", tok)) {
+        if(active != 1) {
+            fatal_error("Unstructured '#' outside of <#   #> delimiters\n");
+        }
+        out(mode, "fth_convert_digit();\n");
+    } else if(streql("#s", tok)) {
+        if(active != 1) {
+            fatal_error("Unstructured '#s' outside of <#   #> delimiters\n");
+        }
+        out(mode, "fth_convert_number();\n");
+    } else {
+        return 0;
+    }
+    return 1;
+
+}
+
 /*TODO actually compile these*/
 const char * builtins = 
     ": cr ( -- ) 10 emit ; "
@@ -272,6 +320,9 @@ void run_compiler(FILE * fp) {
     long variables_len = 0;
     static char words[1024][strcap] = {0};
     long words_len = 0;
+    static char constants[1024][strcap] = {0};
+    long constants_len = 0;
+    int numeric_output_process = 0;
 
     /*printf("#include \"fth2c.h\"\n");*/
     print_file("fth2c.h");
@@ -286,15 +337,28 @@ void run_compiler(FILE * fp) {
             } else if(find_string(variables, variables_len, tok) != -1) {
                 normalize_identifier(tok);
                 out(LATER, "fth_lit((Cell)%s);\n", tok);
+            } else if(find_string(constants, constants_len, tok) != -1) {
+                normalize_identifier(tok);
+                out(LATER, "fth_lit(%s);\n", tok);
             } else if(match_math_operations(tok, 1)) {
             } else if(match_memory_operations(tok, 1)) {
             } else if(match_boolean_operations(tok, 1)) {
             } else if(match_stack_operations(tok, 1)) {
             } else if(match_io_operations(tok, 1)) {
+            } else if(match_numeric_conversion_operations(tok, 1)) {
+
+            /* Number to String conversion */
 
             /* Variables */
             } else if(streql("variable", tok)) {
                 state = VARIABLE_NAME;
+            } else if(streql("constant", tok)) {
+                tok = get_token(fp);
+                memmove(constants[constants_len], tok, strlen(tok));
+                ++constants_len;
+                normalize_identifier(tok);
+                out(NOW, "Cell %s = 0;\n", tok);
+                out(LATER, "%s = pop();\n", tok);
             } else if (streql(tok, ":")) {
                 state = WORD_NAME;
             } else if (streql(tok, "allot")) {
@@ -362,21 +426,25 @@ void run_compiler(FILE * fp) {
         case WORD_BODY: 
             if(find_string(words, words_len, tok) != -1) {
                 normalize_identifier(tok);
-                printf("%s();\n", tok);
+                out(NOW,"%s();\n", tok);
             } else if(find_string(variables, variables_len, tok) != -1) {
                 normalize_identifier(tok);
-                printf("fth_lit((Cell)%s);\n", tok);
+                out(NOW, "fth_lit((Cell)%s);\n", tok);
+            } else if(find_string(constants, constants_len, tok) != -1) {
+                normalize_identifier(tok);
+                out(NOW, "fth_lit(%s);\n", tok);
             } else if(match_math_operations(tok, 0)) {
             } else if(match_memory_operations(tok, 0)) {
             } else if(match_boolean_operations(tok, 0)) {
             } else if(match_stack_operations(tok, 0)) {
             } else if(match_io_operations(tok, 0)) {
+            } else if(match_numeric_conversion_operations(tok, 0)) {
 
             } else if (streql(tok, ".\"")) {
                 char buf[1024] = {0};
                 long buflen = 0;
                 char ch = fgetc(fp);
-                for(;ch != '"' && !feof(fp); ch = fgetc(fp)) {
+                for(;ch != '"' && !feof(fp); ch = fgetc(fp), ++buflen) {
                     buf[buflen] = ch;
                     buf[buflen + 1] = 0;
                 }
