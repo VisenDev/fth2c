@@ -81,6 +81,11 @@ void fth_eql(void) {
     Cell next = pop();
     push(top == next);
 }
+void fth_not_eql(void) {
+    Cell top = pop();
+    Cell next = pop();
+    push(top != next);
+}
 void fth_less_than(void) {
     Cell top = pop();
     Cell next = pop();

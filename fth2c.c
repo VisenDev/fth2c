@@ -7,6 +7,13 @@
 
 #define strcap 64
 
+/* TODO
+ * Constant support
+ * Support for create???
+ * File io
+ * Rework allot and variables to use a runtime stack rather than malloc
+ */
+
 void fatal_error(const char * fmt, ...) {
     va_list args;
     va_start(args, fmt);
@@ -182,6 +189,8 @@ int match_boolean_operations(char * tok, int toplevel) {
     OutputMode mode = toplevel ? LATER : NOW;
     if(streql("=", tok)) {
         out(mode, "fth_eql();\n");
+    } else if(streql("<>", tok)) {
+        out(mode, "fth_not_eql();\n");
     } else if(streql("<", tok)) {
         out(mode, "fth_less_than();\n");
     } else if(streql(">", tok)) {
@@ -390,6 +399,11 @@ void run_compiler(FILE * fp) {
                 out(NOW, "} else {\n");
             } else if(streql("then", tok)) {
                 out(NOW, "}\n");
+
+            /* Immediate words */
+            } else if(streql("[char]", tok)) {
+                tok = get_token(fp);
+                out(NOW, "push('%c');\n", tok[0]);
 
             /* begin while repeat */
             } else if(streql("begin", tok)) {
