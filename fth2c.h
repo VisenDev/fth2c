@@ -131,6 +131,9 @@ void fth_cr(void) {
     printf("\n");
 }
 void fth_bl(void) {
+    push(' ');
+}
+void fth_space(void) {
     printf(" ");
 }
 void fth_cell_plus(void) {

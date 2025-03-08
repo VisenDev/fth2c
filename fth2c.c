@@ -62,7 +62,7 @@ char * get_token(FILE * fp) {
         ch = fgetc(fp);
     }
     while(!feof(fp) && !isspace(ch)) {
-        buf[len] = ch;
+        buf[len] = tolower(ch);
         buf[len + 1] = 0;
         ++len;
         ch = fgetc(fp);
@@ -234,6 +234,8 @@ int match_io_operations(char * tok, int toplevel) {
         out(mode, "fth_cr();\n");
     } else if(streql("bl", tok)) {
         out(mode, "fth_bl();\n");
+    } else if(streql("space", tok)) {
+        out(mode, "fth_space();\n");
     } else {
         return 0;
     }
