@@ -81,7 +81,7 @@ int streql(const char * a, const char * b) {
 
 int find_string(const char haystack[][strcap], long count, const char * needle) {
     long i = 0;
-    for(i = 0; i < count; ++i) {
+    for(i = count - 1; i >= 0; --i) {
         if(streql(haystack[i], needle)) {
             return i;
         }
@@ -149,8 +149,12 @@ int match_math_operations(char * tok, int toplevel) {
         out(mode, "fth_div();\n");
     } else if(streql("mod", tok)) {
         out(mode, "fth_mod();\n");
+    } else if(streql("abs", tok)) {
+        out(mode, "fth_abs();\n");
     } else if (streql(tok, "cells")) {
-        out(mode,"push(pop() * sizeof(Cell));\n"); 
+        out(mode,"fth_cells();\n"); 
+    } else if (streql(tok, "cell+")) {
+        out(mode,"fth_cell_plus();\n"); 
     } else {
         return 0;
     }
@@ -203,6 +207,14 @@ int match_stack_operations(char * tok, int toplevel) {
         out(mode, "fth_dup();\n");
     } else if(streql("swap", tok)) {
         out(mode, "fth_swap();\n");
+    } else if(streql("nip", tok)) {
+        out(mode, "fth_nip();\n");
+    } else if(streql("rot", tok)) {
+        out(mode, "fth_rot();\n");
+    } else if(streql("pick", tok)) {
+        out(mode, "fth_pick();\n");
+    } else if(streql("over", tok)) {
+        out(mode, "fth_over();\n");
     } else {
         return 0;
     }
@@ -216,11 +228,23 @@ int match_io_operations(char * tok, int toplevel) {
         out(mode, "fth_emit();\n");
     } else if(streql(".", tok)) {
         out(mode, "fth_print_top();\n");
+    } else if(streql("type", tok)) {
+        out(mode, "fth_type();\n");
+    } else if(streql("cr", tok)) {
+        out(mode, "fth_cr();\n");
+    } else if(streql("bl", tok)) {
+        out(mode, "fth_bl();\n");
     } else {
         return 0;
     }
     return 1;
 }
+
+/*TODO actually compile these*/
+const char * builtins = 
+    ": cr ( -- ) 10 emit ; "
+    ": abs (n -- n) dup 0 > if else -1 * then ; "
+;
 
 void run_compiler(FILE * fp) {
     char * tok = get_token(fp);
@@ -237,8 +261,6 @@ void run_compiler(FILE * fp) {
     long variables_len = 0;
     static char words[1024][strcap] = {0};
     long words_len = 0;
-    long label_counter = 0;
-    long label_nesting_counter = 0;
 
     /*printf("#include \"fth2c.h\"\n");*/
     print_file("fth2c.h");
@@ -247,7 +269,13 @@ void run_compiler(FILE * fp) {
         switch(state) { 
         case TOP_LEVEL:
 
-            if(match_math_operations(tok, 1)) {
+            if(find_string(words, words_len, tok) != -1) {
+                normalize_identifier(tok);
+                out(LATER, "%s();\n", tok);
+            } else if(find_string(variables, variables_len, tok) != -1) {
+                normalize_identifier(tok);
+                out(LATER, "fth_lit((Cell)%s);\n", tok);
+            } else if(match_math_operations(tok, 1)) {
             } else if(match_memory_operations(tok, 1)) {
             } else if(match_boolean_operations(tok, 1)) {
             } else if(match_stack_operations(tok, 1)) {
@@ -265,6 +293,26 @@ void run_compiler(FILE * fp) {
                 out(LATER, "%s = realloc(%s, pop() + sizeof(Cell));\n",
                         variables[variables_len - 1],
                         variables[variables_len - 1]);
+            /* Strings */
+            } else if (streql(tok, ".\"")) {
+                char buf[1024] = {0};
+                long buflen = 0;
+                char ch = fgetc(fp);
+                for(;ch != '"' && !feof(fp); ch = fgetc(fp), ++buflen) {
+                    buf[buflen] = ch;
+                    buf[buflen + 1] = 0;
+                }
+                out(LATER, "printf(\"%s\");\n", buf);
+            } else if (streql(tok, "s\"")) {
+                char buf[1024] = {0};
+                long buflen = 0;
+                char ch = fgetc(fp);
+                for(;ch != '"' && !feof(fp); ch = fgetc(fp), ++buflen) {
+                    buf[buflen] = ch;
+                    buf[buflen + 1] = 0;
+                }
+                out(LATER, "fth_lit((Cell)\"%s\");\n", buf);
+                out(LATER, "fth_lit(%d);\n", strlen(buf));
 
 
             /* Comments */
@@ -276,12 +324,6 @@ void run_compiler(FILE * fp) {
                 out(LATER, "exit(0);\n");
             } else if(is_number(tok)) {
                 out(LATER, "fth_lit(%s);\n", tok);
-            } else if(find_string(words, words_len, tok) != -1) {
-                normalize_identifier(tok);
-                out(LATER, "%s();\n", tok);
-            } else if(find_string(variables, variables_len, tok) != -1) {
-                normalize_identifier(tok);
-                out(LATER, "fth_lit((Cell)%s);\n", tok);
             } else {
                 fprintf(stderr, "invalid tok: \"%s\"\n", tok);
             }
@@ -307,11 +349,37 @@ void run_compiler(FILE * fp) {
             }
             break;
         case WORD_BODY: 
-            if(match_math_operations(tok, 0)) {
+            if(find_string(words, words_len, tok) != -1) {
+                normalize_identifier(tok);
+                printf("%s();\n", tok);
+            } else if(find_string(variables, variables_len, tok) != -1) {
+                normalize_identifier(tok);
+                printf("fth_lit((Cell)%s);\n", tok);
+            } else if(match_math_operations(tok, 0)) {
             } else if(match_memory_operations(tok, 0)) {
             } else if(match_boolean_operations(tok, 0)) {
             } else if(match_stack_operations(tok, 0)) {
             } else if(match_io_operations(tok, 0)) {
+
+            } else if (streql(tok, ".\"")) {
+                char buf[1024] = {0};
+                long buflen = 0;
+                char ch = fgetc(fp);
+                for(;ch != '"' && !feof(fp); ch = fgetc(fp)) {
+                    buf[buflen] = ch;
+                    buf[buflen + 1] = 0;
+                }
+                out(NOW, "printf(\"%s\");\n", buf);
+            } else if (streql(tok, "s\"")) {
+                char buf[1024] = {0};
+                long buflen = 0;
+                char ch = fgetc(fp);
+                for(;ch != '"' && !feof(fp); ch = fgetc(fp), ++buflen) {
+                    buf[buflen] = ch;
+                    buf[buflen + 1] = 0;
+                }
+                out(NOW, "fth_lit((Cell)\"%s\");\n", buf);
+                out(NOW, "fth_lit(%d);\n", strlen(buf));
 
             /* if statements */
             } else if(streql("if", tok)) {
@@ -323,13 +391,13 @@ void run_compiler(FILE * fp) {
 
             /* begin while repeat */
             } else if(streql("begin", tok)) {
-                ++label_counter;
-                out(NOW, "A%d:\n", label_counter);
+                out(NOW, "do {\n");
             } else if(streql("while", tok)) {
-                out(NOW, "if(pop()) {\n");
+                out(NOW, "if(!pop()) break;\n");
             } else if(streql("repeat", tok)) {
-                out(NOW, "goto A%d;\n}\n", label_counter);
-                --label_counter;
+                out(NOW, "} while(1);\n");
+            } else if(streql("until", tok)) {
+                out(NOW, "} while(!pop());\n");
 
             /* Comments */
             } else if (streql(tok, "(")) {
@@ -343,12 +411,6 @@ void run_compiler(FILE * fp) {
                 state = TOP_LEVEL;
             } else if(is_number(tok)) {
                 printf("fth_lit(%s);\n", tok);
-            } else if(find_string(words, words_len, tok) != -1) {
-                normalize_identifier(tok);
-                printf("%s();\n", tok);
-            } else if(find_string(variables, variables_len, tok) != -1) {
-                normalize_identifier(tok);
-                printf("fth_lit((Cell)%s);\n", tok);
             } else {
                 fprintf(stderr, "invalid tok: \"%s\"\n", tok);
             }
@@ -368,7 +430,7 @@ void run_compiler(FILE * fp) {
         }
     }
 
-    printf("int main(void) {\nCell tmp = 0;\n");
+    printf("int main(void) {\n");
     out(FLUSH, NULL);
     printf("return 0;\n}\n");
 }

@@ -74,7 +74,7 @@ void fth_swap(void) {
 }
 void fth_print_top(void) {
     Cell top = pop();
-    printf("%lu ", top);
+    printf("%ld ", top);
 }
 void fth_eql(void) {
     Cell top = pop();
@@ -110,4 +110,66 @@ void fth_or(void) {
     Cell top = pop();
     Cell next = pop();
     push(top || next);
+}
+void fth_type(void) {
+    Cell len = pop();
+    char * ptr = (char*)pop();
+    Cell counter = 0;
+    assert(len >= 0);
+    assert(ptr != NULL);
+    for(;counter < len; ++counter) {
+        printf("%c", ptr[counter]);
+    }
+}
+void fth_abs(void) {
+    Cell top = pop();
+    top *= ((top < 0) * -1) + ((top >= 0) * 1);
+    assert(top >= 0);
+    push(top);
+}
+void fth_cr(void) {
+    printf("\n");
+}
+void fth_bl(void) {
+    printf(" ");
+}
+void fth_cell_plus(void) {
+    Cell top = pop();
+    top += sizeof(Cell);
+    push(top);
+}
+void fth_cells(void) {
+    Cell top = pop();
+    top *= sizeof(Cell);
+    push(top);
+}
+void fth_nip(void) {
+    Cell top = pop();
+    pop();
+    push(top);
+}
+void fth_over(void) {
+    Cell top = pop();
+    Cell next = pop();
+    push(next);
+    push(top);
+    push(next);
+}
+void fth_rot(void) {
+    /* 1 2 3  ->  2 3 1 */
+    Cell top = pop();
+    Cell next = pop();
+    Cell third = pop();
+    push(next);
+    push(top);
+    push(third);
+}
+void fth_pick(void) {
+    Cell top = pop();
+    assert(top >= 0);
+    assert(stack_len > top);
+    {
+        Cell index = stack_len - top - 1;
+        push(stack[index]);
+    }
 }
