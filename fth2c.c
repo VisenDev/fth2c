@@ -8,11 +8,9 @@
 #define strcap 64
 
 /* TODO
- * Constant support
  * Support for create???
  * File io
  * Rework allot and variables to use a runtime stack rather than malloc
- * normalize c keywords
  */
 
 void fatal_error(const char * fmt, ...) {
@@ -49,15 +47,93 @@ int is_identifier(char * str) {
     return 1;
 }
 
+
+int streql(const char * a, const char * b) {
+    return strcmp(a, b) == 0;
+}
+
+int find_string(const char haystack[][strcap], long count, const char * needle) {
+    long i = 0;
+    for(i = count - 1; i >= 0; --i) {
+        if(streql(haystack[i], needle)) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+const char reserved_identifiers[][strcap] = {
+    /* C Keywords (C11)*/
+    "auto", "break", "case", "char", "const", "continue", "default", "do",
+    "double", "else", "enum", "extern", "float", "for", "goto", "if",
+    "inline", "int", "long", "register", "restrict", "return", "short",
+    "signed", "sizeof", "static", "struct", "switch", "typedef", "union",
+    "unsigned", "void", "volatile", "while", "_Alignas", "_Alignof",
+    "_Atomic", "_Bool", "_Complex", "_Generic", "_Imaginary", "_Noreturn",
+    "_Static_assert", "_Thread_local",
+
+    /* Standard Library Functions (Common headers)*/
+    
+    /* <stdio.h> */
+    "printf", "scanf", "fprintf", "fscanf", "sprintf", "sscanf",
+    "vprintf", "vscanf", "vfprintf", "vfscanf", "vsprintf", "vsscanf",
+    "fopen", "fclose", "fgets", "fputs", "fputc", "fgetc",
+    "fread", "fwrite", "feof", "ferror", "clearerr", "rewind",
+    "ftell", "fseek", "fflush", "perror",
+
+    /* <stdlib.h> */
+    "malloc", "calloc", "realloc", "free",
+    "exit", "abort", "atexit", "system",
+    "atoi", "atof", "atol", "strtod", "strtol", "strtoul",
+    "rand", "srand", "bsearch", "qsort",
+
+    /* <string.h> */
+    "strcpy", "strncpy", "strcat", "strncat", "strcmp", "strncmp",
+    "strlen", "strchr", "strrchr", "strstr", "strtok",
+    "memcpy", "memmove", "memcmp", "memset",
+
+    /* <math.h> */
+    "sin", "cos", "tan", "asin", "acos", "atan", "atan2",
+    "sinh", "cosh", "tanh", "exp", "log", "log10",
+    "pow", "sqrt", "ceil", "floor", "fabs", "fmod",
+
+    /* <time.h> */
+    "clock", "time", "difftime", "mktime", "strftime",
+
+    /* <ctype.h> */
+    "isalpha", "isdigit", "isalnum", "islower", "isupper",
+    "tolower", "toupper", "isspace", "ispunct", "isprint",
+};
+const long reserved_identifiers_len =
+    sizeof(reserved_identifiers) /
+    (sizeof(reserved_identifiers[0]));
+
 /* TODO 
  * replace names that are C keywords*/
-void normalize_identifier(char * str) {
-    while(*str != 0) {
-        if(!isalpha(*str) && !isdigit(*str) && *str != '_') {
-            *str = '_';
-        }
-        ++str;
+char * normalize_identifier(const char * str) {
+    static char buf[1024] = {0};
+    long buf_i = 0;
+    long i = 0;
+    memset(buf, 0, sizeof(buf));
+    if(isdigit(str[i])) {
+        buf[buf_i] = '_';
+        ++buf_i;
     }
+    for(i = 0; str[i] != 0; ++i, ++buf_i) {
+        if(!isalpha(str[i]) && !isdigit(str[i]) && str[i] != '_') {
+            if(str[i] == '-') {
+                buf[buf_i] = '_';
+            } else {
+                buf_i += snprintf(buf + buf_i, sizeof(buf) - buf_i, "_%d_", str[i]);
+            }
+        } else {
+            buf[buf_i] = str[i];
+        }
+    }
+    if(find_string(reserved_identifiers, reserved_identifiers_len, buf) != -1) {
+        buf[buf_i] = '_';
+    }
+    return buf;
 }
 
 char * get_token(FILE * fp) {
@@ -83,18 +159,14 @@ char * get_token(FILE * fp) {
     }
 }
 
-int streql(const char * a, const char * b) {
-    return strcmp(a, b) == 0;
-}
-
-int find_string(const char haystack[][strcap], long count, const char * needle) {
-    long i = 0;
-    for(i = count - 1; i >= 0; --i) {
-        if(streql(haystack[i], needle)) {
-            return i;
-        }
+FILE * string_to_file(const char * contents) {
+    FILE *fp = tmpfile();
+    if (!fp) {
+        fatal_error("Failed to open a temporary file");
     }
-    return -1;
+    fputs(contents, fp);
+    rewind(fp);
+    return fp;
 }
 
 void print_file(const char * filename) {
@@ -189,6 +261,8 @@ int match_memory_operations(char * tok, int toplevel) {
         out(mode,"*(Cell *)tmp += pop();\n");
     } else if(streql("@", tok)) {
         out(mode, "push(*(Cell *)pop());\n");
+    } else if(streql("?", tok)) {
+        out(mode, "push(*(Cell *)pop());\nfth_print_top();\n");
     } else {
         return 0;
     }
@@ -250,6 +324,8 @@ int match_io_operations(char * tok, int toplevel) {
         out(mode, "fth_emit();\n");
     } else if(streql(".", tok)) {
         out(mode, "fth_print_top();\n");
+    } else if(streql("key", tok)) {
+        out(mode, "push(fgetc(stdin));\n");
     } else if(streql("type", tok)) {
         out(mode, "fth_type();\n");
     } else if(streql("cr", tok)) {
@@ -305,39 +381,61 @@ const char * builtins =
     ": abs (n -- n) dup 0 > if else -1 * then ; "
 ;
 
-void run_compiler(FILE * fp) {
+/*const char * teststr = " : let create , ; ";*/
+/* 0 let counter
+ * 
+ * out(LATER, push(0));
+ * if(is_create_word(tok)) {
+ *    tok = get_token(fp);
+ *    out(NOW, "Cell %s = 0;", tok);
+ *    push(create_word_things(tok));
+ * }
+ *
+ */
+
+/* if(streql("create", tok)) {
+ *    
+ * }*/
+
+
+typedef enum {
+    TOP_LEVEL,
+    WORD_NAME,
+    WORD_BODY,
+    PAREN_COMMENT_TOP_LEVEL,
+    PAREN_COMMENT_WORD_BODY,
+    VARIABLE_NAME,
+    /*SLASH_COMMENT,*/
+} CompilerState;
+
+typedef struct {
+    char variables[1024][strcap];
+    long variables_len;
+    char words[1024][strcap];
+    long words_len;
+    char constants[1024][strcap];
+    long constants_len;
+    CompilerState state;
+} Compiler;
+
+void compile_file(FILE * fp, Compiler * c) {
     char * tok = get_token(fp);
-    enum {
-        TOP_LEVEL,
-        WORD_NAME,
-        WORD_BODY,
-        PAREN_COMMENT_TOP_LEVEL,
-        PAREN_COMMENT_WORD_BODY,
-        VARIABLE_NAME,
-        /*SLASH_COMMENT,*/
-    } state = 0;
-    static char variables[1024][strcap] = {0};
-    long variables_len = 0;
-    static char words[1024][strcap] = {0};
-    long words_len = 0;
-    static char constants[1024][strcap] = {0};
-    long constants_len = 0;
 
     /*printf("#include \"fth2c.h\"\n");*/
-    print_file("fth2c.h");
+    /*print_file("fth2c.h");*/
 
     for(;tok != NULL; tok = get_token(fp)) {
-        switch(state) { 
+        switch(c->state) { 
         case TOP_LEVEL:
 
-            if(find_string(words, words_len, tok) != -1) {
-                normalize_identifier(tok);
+            if(find_string(c->words, c->words_len, tok) != -1) {
+                tok = normalize_identifier(tok);
                 out(LATER, "%s();\n", tok);
-            } else if(find_string(variables, variables_len, tok) != -1) {
-                normalize_identifier(tok);
+            } else if(find_string(c->variables, c->variables_len, tok) != -1) {
+                tok = normalize_identifier(tok);
                 out(LATER, "fth_lit((Cell)%s);\n", tok);
-            } else if(find_string(constants, constants_len, tok) != -1) {
-                normalize_identifier(tok);
+            } else if(find_string(c->constants, c->constants_len, tok) != -1) {
+                tok = normalize_identifier(tok);
                 out(LATER, "fth_lit(%s);\n", tok);
             } else if(match_math_operations(tok, 1)) {
             } else if(match_memory_operations(tok, 1)) {
@@ -346,27 +444,49 @@ void run_compiler(FILE * fp) {
             } else if(match_io_operations(tok, 1)) {
             } else if(match_numeric_conversion_operations(tok, 1)) {
 
-            /* Number to String conversion */
+            /* Include */
+            } else if(streql("include", tok)) {
+                FILE * included = NULL;
+                tok = get_token(fp);
+                included = fopen(tok, "r");
+                if(included == NULL) {
+                    fatal_error("Failed to open file: %s\n", tok);
+                }
+                compile_file(included, c);
+                fclose(included);
 
             /* Variables */
             } else if(streql("variable", tok)) {
-                state = VARIABLE_NAME;
+                c->state = VARIABLE_NAME;
             } else if(streql("constant", tok)) {
                 tok = get_token(fp);
-                memmove(constants[constants_len], tok, strlen(tok));
-                ++constants_len;
-                normalize_identifier(tok);
+                memmove(c->constants[c->constants_len], tok, strlen(tok));
+                ++c->constants_len;
+                tok = normalize_identifier(tok);
                 out(NOW, "Cell %s = 0;\n", tok);
                 out(LATER, "%s = pop();\n", tok);
+            } else if(streql("value", tok)) {
+                tok = get_token(fp);
+                memmove(c->constants[c->constants_len], tok, strlen(tok));
+                ++c->constants_len;
+                tok = normalize_identifier(tok);
+                out(NOW, "Cell %s = 0;\n", tok);
+                out(LATER, "%s = pop();\n", tok);
+            } else if(streql("to", tok)) {
+                tok = get_token(fp);
+                memmove(c->constants[c->constants_len], tok, strlen(tok));
+                ++c->constants_len;
+                tok = normalize_identifier(tok);
+                out(LATER, "%s = pop();\n", tok);
             } else if (streql(tok, ":")) {
-                state = WORD_NAME;
+                c->state = WORD_NAME;
             } else if (streql(tok, "allot")) {
-                if(variables_len <= 0) {
+                if(c->variables_len <= 0) {
                     fatal_error("Tried to allot memory for a non-existent variable"); 
                 }
                 out(LATER, "%s = realloc(%s, pop() + sizeof(Cell));\n",
-                        variables[variables_len - 1],
-                        variables[variables_len - 1]);
+                        c->variables[c->variables_len - 1],
+                        c->variables[c->variables_len - 1]);
             /* Strings */
             } else if (streql(tok, ".\"")) {
                 char buf[1024] = {0};
@@ -391,7 +511,7 @@ void run_compiler(FILE * fp) {
 
             /* Comments */
             } else if (streql(tok, "(")) {
-                state = PAREN_COMMENT_TOP_LEVEL;
+                c->state = PAREN_COMMENT_TOP_LEVEL;
 
             /* Misc */
             } else if(streql("bye", tok)) {
@@ -403,34 +523,34 @@ void run_compiler(FILE * fp) {
             }
             break;
         case WORD_NAME: 
-            if(find_string(words, words_len, tok) != -1) {
+            if(find_string(c->words, c->words_len, tok) != -1) {
                 fatal_error("Multiply defined symbol: %s\n", tok);
             }
-            memmove(words[words_len], tok, strlen(tok));
-            words_len += 1;
-            normalize_identifier(tok);
+            memmove(c->words[c->words_len], tok, strlen(tok));
+            c->words_len += 1;
+            tok =normalize_identifier(tok);
             out(NOW, "void %s(void) {\n", tok);
-            state = WORD_BODY;
+            c->state = WORD_BODY;
             break;
         case PAREN_COMMENT_TOP_LEVEL:
             if(strlen(tok) > 0 && tok[strlen(tok) - 1] == ')') {
-                state = TOP_LEVEL;
+                c->state = TOP_LEVEL;
             }
             break;
         case PAREN_COMMENT_WORD_BODY:
             if(strlen(tok) > 0 && tok[strlen(tok) - 1] == ')') {
-                state = WORD_BODY;
+                c->state = WORD_BODY;
             }
             break;
         case WORD_BODY: 
-            if(find_string(words, words_len, tok) != -1) {
-                normalize_identifier(tok);
+            if(find_string(c->words, c->words_len, tok) != -1) {
+                tok =normalize_identifier(tok);
                 out(NOW,"%s();\n", tok);
-            } else if(find_string(variables, variables_len, tok) != -1) {
-                normalize_identifier(tok);
+            } else if(find_string(c->variables, c->variables_len, tok) != -1) {
+                tok =normalize_identifier(tok);
                 out(NOW, "fth_lit((Cell)%s);\n", tok);
-            } else if(find_string(constants, constants_len, tok) != -1) {
-                normalize_identifier(tok);
+            } else if(find_string(c->constants, c->constants_len, tok) != -1) {
+                tok = normalize_identifier(tok);
                 out(NOW, "fth_lit(%s);\n", tok);
             } else if(match_math_operations(tok, 0)) {
             } else if(match_memory_operations(tok, 0)) {
@@ -484,14 +604,22 @@ void run_compiler(FILE * fp) {
 
             /* Comments */
             } else if (streql(tok, "(")) {
-                state = PAREN_COMMENT_WORD_BODY;
+                c->state = PAREN_COMMENT_WORD_BODY;
+
+            /* to */
+            } else if(streql("to", tok)) {
+                tok = get_token(fp);
+                memmove(c->constants[c->constants_len], tok, strlen(tok));
+                ++c->constants_len;
+                tok = normalize_identifier(tok);
+                out(NOW, "%s = pop();\n", tok);
 
             /* Misc */
             } else if(streql("bye", tok)) {
                 printf("exit(0);\n");
             } else if(streql(";", tok)) {
                 printf("}\n");
-                state = TOP_LEVEL;
+                c->state = TOP_LEVEL;
             } else if(is_number(tok)) {
                 printf("fth_lit(%s);\n", tok);
             } else {
@@ -500,19 +628,32 @@ void run_compiler(FILE * fp) {
             break;
             
         case VARIABLE_NAME:
-            if(find_string(words, words_len, tok) != -1) {
+            if(find_string(c->words, c->words_len, tok) != -1) {
                 fatal_error("Multiply defined symbol: %s\n", tok);
             }
-            memmove(variables[variables_len], tok, strlen(tok));
-            variables_len += 1;
-            normalize_identifier(tok);
+            memmove(c->variables[c->variables_len], tok, strlen(tok));
+            c->variables_len += 1;
+            tok = normalize_identifier(tok);
             printf("Cell * %s = 0;\n", tok);
             out(LATER, "%s = malloc(sizeof(Cell));\n", tok);
-            state = TOP_LEVEL;
+            c->state = TOP_LEVEL;
 
         }
     }
 
+    /*
+    printf("int main(void) {\n");
+    out(FLUSH, NULL);
+    printf("return 0;\n}\n");
+    */
+}
+
+void compiliation_start(FILE * fp) {
+    Compiler c = {0};
+    print_file("fth2c.h");
+
+    compile_file(fp, &c);
+    
     printf("int main(void) {\n");
     out(FLUSH, NULL);
     printf("return 0;\n}\n");
@@ -527,7 +668,7 @@ int main(int argc, char ** argv) {
     } else {
         char * filename = argv[1];
         FILE * fp = fopen(filename, "rw");
-        run_compiler(fp);
+        compiliation_start(fp);
         fclose(fp);
     }
 

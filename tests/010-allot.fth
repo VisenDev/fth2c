@@ -15,4 +15,13 @@ buf 3 cells + @ .
 buf 4 cells + @ .
 buf 5 cells + @ .
 
+
+buf 0 cells + ?
+buf 1 cells + ?
+buf 2 cells + ?
+buf 3 cells + ?
+buf 4 cells + ?
+buf 5 cells + ?
+
+
 bye
